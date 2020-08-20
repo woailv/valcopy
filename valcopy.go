@@ -1,4 +1,4 @@
-package algoutil
+package valcopy
 
 import (
 	"reflect"
@@ -6,11 +6,6 @@ import (
 	"time"
 )
 
-//不通对象自动赋值
-//src,dist 须为结构体指针
-//数组字段须为值类型数组，不能为指针类型数组
-//自动类型转换string->int64,uint64,int64,uint64->string,time.Time->string, string->time.Time，默认值转换:(i)=>i
-//主要用于实体对象转pb文件对象，其余类型转换可能出现BUG
 func ValMap(src, dist interface{}, mapFunc map[string]func(srcFieldVal interface{}) interface{}, pre ...string) {
 	srv := reflect.ValueOf(src)
 	for ; srv.Kind() == reflect.Ptr; {
