@@ -1,18 +1,28 @@
 package valcopy
 
 import (
+	"fmt"
 	"reflect"
 	"strconv"
 	"time"
 )
 
+//不通对象自动赋值
+//src,dist 须为结构体指针
+//数组字段须为值类型数组，不能为指针类型数组
+//自动类型转换string->int64,uint64,int64,uint64->string,time.Time->string, string->time.Time，默认值转换:(i)=>i
+//主要用于实体对象转pb文件对象，其余类型转换可能出现BUG
 func ValMap(src, dist interface{}, mapFunc map[string]func(srcFieldVal interface{}) interface{}, pre ...string) {
 	srv := reflect.ValueOf(src)
 	for ; srv.Kind() == reflect.Ptr; {
 		srv = srv.Elem()
 	}
 	srt := srv.Type()
-	drv := reflect.ValueOf(dist).Elem()
+
+	drv := reflect.ValueOf(dist)
+	for ; drv.Kind() == reflect.Ptr; {
+		drv = drv.Elem()
+	}
 	drt := drv.Type()
 
 	preRes := "."
@@ -33,14 +43,31 @@ func ValMap(src, dist interface{}, mapFunc map[string]func(srcFieldVal interface
 			distType = distType.Elem()
 			n++
 		}
-		for k := 0; k < srv.Len(); k++ {
-			distElem := reflect.New(distType)
-			ValMap(srv.Index(k).Interface(), distElem.Interface(), mapFunc, preRes+drt.Name()+".") //drt.Name() 待测试
-			distElem = distElem.Elem()
-			for a := n; a > 0; a-- {
-				distElem = distElem.Addr()
+		switch distType.Kind() {
+		case reflect.Struct:
+			for k := 0; k < srv.Len(); k++ {
+				distElem := reflect.New(distType)
+				ValMap(srv.Index(k).Interface(), distElem.Interface(), mapFunc, preRes+drt.Name()+".") //drt.Name() 待测试
+				distElem = distElem.Elem()
+				for a := n; a > 0; a-- {
+					distElem = distElem.Addr()
+				}
+				drv.Set(reflect.Append(drv, distElem))
 			}
-			drv.Set(reflect.Append(drv, distElem))
+		case reflect.String:
+			for k := 0; k < srv.Len(); k++ {
+				drv.Set(reflect.Append(drv, reflect.ValueOf(i2String(srv.Index(k).Interface()))))
+			}
+		case reflect.Uint64:
+			for k := 0; k < srv.Len(); k++ {
+				drv.Set(reflect.Append(drv, reflect.ValueOf(i2Uint64(srv.Index(k).Interface()))))
+			}
+		case reflect.Int64:
+			for k := 0; k < srv.Len(); k++ {
+				drv.Set(reflect.Append(drv, reflect.ValueOf(i2Int64(srv.Index(k).Interface()))))
+			}
+		default:
+			panic(fmt.Sprintf("未能处理的数组元素类型:%s", distType.Kind()))
 		}
 	case reflect.Struct:
 		for i := 0; i < drv.NumField(); i++ {
@@ -67,14 +94,31 @@ func ValMap(src, dist interface{}, mapFunc map[string]func(srcFieldVal interface
 					distType = distType.Elem()
 					n++
 				}
-				for k := 0; k < srvfi.Len(); k++ {
-					distElem := reflect.New(distType)
-					ValMap(srvfi.Index(k).Interface(), distElem.Interface(), mapFunc, preRes+drtfi.Name+".")
-					distElem = distElem.Elem()
-					for a := n; a > 0; a-- {
-						distElem = distElem.Addr()
+				switch distType.Kind() {
+				case reflect.Struct:
+					for k := 0; k < srvfi.Len(); k++ {
+						distElem := reflect.New(distType)
+						ValMap(srvfi.Index(k).Interface(), distElem.Interface(), mapFunc, preRes+drtfi.Name+".")
+						distElem = distElem.Elem()
+						for a := n; a > 0; a-- {
+							distElem = distElem.Addr()
+						}
+						drvfi.Set(reflect.Append(drvfi, distElem))
 					}
-					drvfi.Set(reflect.Append(drvfi, distElem))
+				case reflect.String:
+					for k := 0; k < srvfi.Len(); k++ {
+						drvfi.Set(reflect.Append(drvfi, reflect.ValueOf(i2String(srvfi.Index(k).Interface()))))
+					}
+				case reflect.Uint64:
+					for k := 0; k < srvfi.Len(); k++ {
+						drvfi.Set(reflect.Append(drvfi, reflect.ValueOf(i2Uint64(srvfi.Index(k).Interface()))))
+					}
+				case reflect.Int64:
+					for k := 0; k < srvfi.Len(); k++ {
+						drvfi.Set(reflect.Append(drvfi, reflect.ValueOf(i2Int64(srvfi.Index(k).Interface()))))
+					}
+				default:
+					panic(fmt.Sprintf("未能处理的数组元素类型:%s", distType.Kind()))
 				}
 			default:
 				key := preRes + drtfi.Name
@@ -118,6 +162,8 @@ func ValMap(src, dist interface{}, mapFunc map[string]func(srcFieldVal interface
 				drvfi.Set(reflect.ValueOf(res))
 			}
 		}
+	default:
+		panic(fmt.Sprintf("未处理的列:%s类型:%s", drt.Name(), drt.Kind()))
 	}
 }
 
